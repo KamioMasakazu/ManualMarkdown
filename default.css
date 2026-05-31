@@ -125,3 +125,32 @@ hr.break-asta {
   border-top: dashed black 3px;
 }
 
+/* 手順box */
+div.flow-box {
+  border: solid lightgrey 1px;
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+  padding: 0.25em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+div.flow-parallel {
+  border: dotted black 1px;
+  border-radius: 5px;
+  padding: 0.25em;
+  display: flex;
+  justify-content: canter;
+}
+
+div.flow-item {
+  border: solid black 1px;
+  border-radius: 5px;
+  background-color: lightgray;
+  padding: 0.25em 0.5em;
+}
+
+div.flow-item > div:first-child {
+  text-align:center;
+}

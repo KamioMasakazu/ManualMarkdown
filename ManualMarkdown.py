@@ -128,6 +128,32 @@ class TableData:
 class QuotationData:
 	data: list[str, Self]
 
+#------------------------------------------------------------------------------
+# フローデータ関連
+#------------------------------------------------------------------------------
+class Flow(Enum):
+	Blank = "Blank"
+	Node = "Node"
+	Block = "@flow-block"
+	StartParallel = "@start-parallel"
+	EndParallel = "@end-parallel"
+
+# フローデータ
+@dataclass(frozen=True)
+class FlowBox:
+	data: list[FlowItem | FlowParallel]
+
+# 平行フロー
+@dataclass(frozen=True)
+class FlowParallel:
+	data: list[FlowBox]
+
+# フローアイテム
+@dataclass(frozen=True)
+class FlowItem:
+	data: list[str]
+
+
 ###############################################################################
 # カスタムモード
 ###############################################################################
@@ -277,6 +303,7 @@ class HTMLFormatter(HTMLParser):
 class MdParser:
 	options: RenderOptions	#オプション
 	title: str	# htmlの<title>
+	in_header = False	# <header>を書き始めてから閉じるまで（Trueは書いてる間）
 	header_stack: list[int]	# section階層の追跡用
 	in_code_block: bool	# コードブロックの処理中はTrue
 	code_block_str: str|None    # ```か````か
@@ -354,6 +381,69 @@ class MdParser:
 			value = f"{line_break}-{line_char}"
 		)
 
+	# @flowboxの解析
+	def _parse_flow_box(self, lines) -> FlowBox:
+		if not isinstance(lines, deque):
+			lines = deque(lines)
+
+		ret = []
+		current = []	# 現在処理中のノード
+		parallel = None	# 平行手順ノード
+		while len(lines) != 0:
+			line = lines.popleft().strip()
+			if line == Flow.StartParallel.value:
+				# 平行手順開始
+				parallel = FlowParallel([])
+				stack_count = 1	# @start-parallelの入れ子管理用。0になったら終わり。
+				plines = deque()	# 再起呼び出しのため平行手順の行を集める
+
+				while len(lines) != 0:
+					pline = lines.popleft().strip()
+
+					if pline == Flow.StartParallel.value:
+						stack_count += 1
+					elif pline == Flow.EndParallel.value:
+						stack_count -= 1
+					elif pline == Flow.Block.value:
+						# 次の@flow-blockに到達したら再起的に解析してデータを追加、行データをクリア
+						decoded = self._parse_flow_box(plines)
+						parallel.data.append(decoded)
+						plines = deque()
+
+					if stack_count == 0:
+						# 平行手順の終端に達した
+						break
+					else:
+						plines.append(pline)
+
+				# ブロック終端に達した時データがあったら処理する
+				if len(plines) != 0:
+					decoded = self._parse_flow_box(plines)
+					parallel.data.append(decoded)
+				
+				current.append(parallel)
+				parallel = None
+			elif len(line) == 0 or line == Flow.Block.value:
+				# 空白行か@start-parallel〜@end-parallelの間にない@flow-blockはノードの終了
+				if len(current) != 0:
+					if all(isinstance(item, str) for item in current):
+						ret.append(FlowItem(current))
+					else:
+						ret.append(current)
+				current = []
+			else:
+				# 普通の文字列
+				current.append(line)
+
+		# 終端に達した時データがあったら結果に加える
+		if len(current) != 0:
+			if all(isinstance(item, str) for item in current):
+				ret.append(FlowItem(current))
+			else:
+				ret.append(current)
+
+		return FlowBox(ret)
+
 
 	# コードブロック終わりか？ 終わりでなければ生の文字列を返す
 	def _is_code_block_end(self, line: str) -> LineValue | None:
@@ -385,7 +475,10 @@ class MdParser:
 		# コードブロックが始まった
 		self.in_code_block = True
 		self.code_block_str = m.group(1)
-		lines.popleft() # コードブロックの始まりを捨てる
+		mode = m.group(2)
+
+		# コードブロックの始まりを捨てる
+		lines.popleft()
 
 		in_block = []   # コードブロック内の行
 		while True:
@@ -403,11 +496,20 @@ class MdParser:
 		self.code_block_str =None
 		self.in_code_block = False
 
+		# 追加の解析が必要な場合
+		HANDLE = {
+			"@flowbox": self._parse_flow_box
+		}
+
+		if mode in HANDLE:
+			handler = HANDLE[mode]
+			in_block = handler(in_block)
+
 		logger.debug("end: MdParser::_is_code_block()")
 		return LineValue(
 			type = LineType.CodeBlock,
 			value = {
-				"mode": m.group(2),
+				"mode": mode,
 				"lines": in_block
 			}
 		)
@@ -819,24 +921,35 @@ class MdParser:
 			raise ValueError(f"value type is not {LineType.Header}.")
 
 		h_lvl = line.value["level"]
-
 		html = ""
+
+		# 前のセクしションがあるかをチェックする。
 		# ひとつ前のヘッダレベルをチェックして、引数のレベル以上なら必要なだけ閉じる
 		# 引数のレベルの方が大きければ入れ子にする
 		while True:
 			if len(self.header_stack) == 0: break
-
 			last_lvl = self.header_stack[-1]
 			if h_lvl > last_lvl: break
 
-			html += "</section>\n"
+			html += '</section>\n'
 			self.header_stack.pop()
 
-		# 引数のヘッダとセクションを追加
-		html += "<section>\n"
-		text = self._render_inline(line.value["str"])
-		html += f"<h{h_lvl}>{text}</h{h_lvl}>\n"
-		self.header_stack.append(line.value["level"])
+		# <header>を書いてる間に次の<section>に到達したら閉じる
+		if self.in_header:
+			html += '</header>\n'
+			self.in_header = False
+
+		if h_lvl == 1:
+			html += '<header>\n'
+			text = self._render_inline(line.value["str"])
+			html += f'<h{h_lvl}>{text}</h{h_lvl}>\n'
+			self.in_header = True
+		else:
+			# 新しいセクションを追加
+			html += '<section>\n'
+			text = self._render_inline(line.value["str"])
+			html += f'<h{h_lvl}>{text}</h{h_lvl}>\n'
+			self.header_stack.append(line.value["level"])
 
 		return html
 
@@ -892,6 +1005,41 @@ class MdParser:
 
 		return html
 
+	# 手順BOXのhtml書き出し
+	def _add_flow_box(self, mode: CustomMode, flow_data: FlowBox | FlowParallel | FlowItem | list) -> str:
+		ARROW = '<div class="flow-next">▼</div>\n'
+		html_str = ""
+
+		if isinstance(flow_data, FlowBox):
+			html_str += '<div class="flow-box">\n'
+			# 各要素（FlowItem や FlowParallel）の間にのみ ▼ を挟む
+			for i, d in enumerate(flow_data.data):
+				html_str += self._add_flow_box(mode, d)
+				if i < len(flow_data.data) - 1:
+					html_str += ARROW
+			html_str += '</div>\n'
+
+		elif isinstance(flow_data, FlowParallel):
+			html_str += '<div class="flow-parallel">\n'
+			for d in flow_data.data:
+				html_str += self._add_flow_box(mode, d)
+			html_str += '</div>\n'
+
+		elif isinstance(flow_data, FlowItem):
+			html_str += '<div class="flow-item">\n'
+			for d in flow_data.data:
+				text = self._render_inline(d)
+				html_str += f'\t<div>{text}</div>\n'
+			html_str += '</div>\n'
+
+		elif isinstance(flow_data, list):
+			for i, d in enumerate(flow_data):
+				html_str += self._add_flow_box(mode, d)
+				if i < len(flow_data) - 1:
+					html_str += ARROW
+
+		return html_str
+
 	# カスタムモードをパースする
 	# @mode:option(path)の形式
 	def _check_custom_mode(self, mode: str) -> CustomMode:
@@ -933,12 +1081,16 @@ class MdParser:
 		if len(mode) != 0 and mode[0] == "@":
 			HANDLER = {
 				"box": self._add_custom_box,
-				"csv": self._add_custom_csv_table
+				"csv": self._add_custom_csv_table,
+				"flowbox": self._add_flow_box,
 			}
 			# カスタムモード
 			custom_mode = self._check_custom_mode(mode)
-			handle = HANDLER[custom_mode.type]
-			html_str = handle(custom_mode, lines)
+			if custom_mode.type in HANDLER:
+				handle = HANDLER[custom_mode.type]
+				html_str = handle(custom_mode, lines)
+			else:
+				logger.error(f"unknown custome mode '{custom_mode.type}'.")
 		else:
 			# 通常のコードブロック
 			html_str += f'<code class="{mode}">\n' if mode else '<code>\n'
@@ -1223,6 +1375,7 @@ class MdParser:
 			dst = assets / src.name	# コピー先
 			if dst.exists():
 				logger.warning(f"{dst} is already exist. not copied.")
+				continue
 			shutil.copy(src, dst)
 
 	# 出力形式判定

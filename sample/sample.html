@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width">
+		<title>サンプル</title>
+		<style>
+			/* ManualMarkdown デフォルトCSS */
+
+body {
+  margin: 0;
+}
+
+h1 {
+  border-left: 0.5em black solid;
+  border-right: 0.5em black solid;
+  border-top: 1px gray solid;
+  border-bottom: 1px gray solid;
+  font-size: 3em;
+  text-align:center;
+  margin: 0 0 0.5em 0;
+  padding: 0.25em 0;
+}
+
+h2 {
+  border-left: 1.5em solid black;
+  border-bottom: 1px solid black;
+  padding-left : 0.5em;
+}
+
+h3 {
+  border-left: 1.5em solid gray;
+  border-bottom: 1px dotted black;
+  padding-left : 0.5em;
+}
+
+article {
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+}
+
+section > section {
+  padding-left: 1em;
+}
+
+p {
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  width: auto;
+}
+
+table th,
+table td {
+  border: 1px solid #ccc;
+  padding: 6px 8px;
+}
+
+table th {
+  background-color: #f0f0f0;
+}
+
+/* 種別指定ブロック例 */
+.info, .notice {
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.info > div:first-child,
+.notice > div:first-child {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.info > div:first-child::before {
+  content: "❓";
+}
+
+.notice > div:first-child::before {
+  content: "⚠️";
+}
+
+.info > div:nth-child(2),
+.notice > div:nth-child(2) {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fafafa;
+  padding: 0.25em 0.5em;
+}
+
+/* 引用 */
+blockquote {
+  background-color:#fafafa;
+  border-left: solid 5px blue;
+  padding-left: 0.5em;
+}
+
+blockquote > blockquote {
+  margin-inline-start: 1em;
+  margin-inline-end: 0;
+}
+
+/* 横線 */
+hr.break-minus {
+  border-top: solid black 1px;
+}
+
+hr.break-minus {
+  border-top: dashed black 1px;
+}
+
+hr.solid-under {
+  border-top: double black 3px;
+}
+
+hr.break-under {
+  border-top: dotted black 2px;
+}
+
+hr.solid-asta {
+  border-top: solid black 3px;
+}
+
+hr.break-asta {
+  border-top: dashed black 3px;
+}
+
+/* 手順box */
+div.flow-box {
+  border: solid lightgrey 1px;
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+  padding: 0.25em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+div.flow-parallel {
+  border: dotted black 1px;
+  border-radius: 5px;
+  padding: 0.25em;
+  display: flex;
+  justify-content: canter;
+}
+
+div.flow-item {
+  border: solid black 1px;
+  border-radius: 5px;
+  background-color: lightgray;
+  padding: 0.25em 0.5em;
+}
+
+div.flow-item > div:first-child {
+  text-align:center;
+}
+		</style>
+	</head>
+	<body>
+		<article>
+			<header>
+				<h1>サンプル</h1>
+				<p>これはサンプルです。</p>
+				<p>マニュアル用マークダウンのテストです。</p>
+				<p>sample.htmlはManualMarkdown.pyでsample.mdを変換して作ったサンプルです。</p>
+			</header>
+			<section>
+				<h2>強制改行</h2>
+				<p>強制改行には2個以上の空白文字だけの行を置く。</p>
+				<p><br></p>
+				<p>1個だけの空白文字は空行扱い。</p>
+				<p>確認行。</p>
+			</section>
+			<section>
+				<h2>強調</h2>
+				<p>これは<em>強調された文字列</em>です。</p>
+				<p>もっと<strong>強調された文字列</strong>です。</p>
+				<p>一番<strong><em>強調された文字列</em></strong>です。</p>
+			</section>
+			<section>
+				<h2>画像はどうかな？</h2>
+				<p>画像を表示。</p>
+				<p><img src="./assets/test_img.png" alt="テスト画像"></p>
+			</section>
+			<section>
+				<h2>CSVテーブル</h2>
+				<p>インラインのCSV表記をテーブルに。</p>
+				<table>
+					<tr>
+						<th>a</th>
+						<th>b</th>
+						<th>c</th>
+					</tr>
+					<tr>
+						<td>d</td>
+						<td>e</td>
+						<td>f</td>
+					</tr>
+					<tr>
+						<td>CSV</td>
+						<td>テーブル</td>
+						<td>サンプル</td>
+					</tr>
+				</table>
+			</section>
+			<section>
+				<h2>CSVテーブル2</h2>
+				<p>外部ファイルのCSVをテーブルに。</p>
+				<table>
+					<tr>
+						<th>CSV</th>
+						<td>テーブル</td>
+						<td>サンプル</td>
+					</tr>
+					<tr>
+						<th>a</th>
+						<td>b</td>
+						<td>c</td>
+					</tr>
+					<tr>
+						<th>d</th>
+						<td>e</td>
+						<td>f</td>
+					</tr>
+				</table>
+			</section>
+			<section>
+				<h2>マークダウンのテーブル</h2>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th class="center">魚</th>
+								<th class="center">頭足類</th>
+								<th class="center">貝</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td class="center">タイ</td>
+								<td class="center">タコ</td>
+								<td class="center">ホタテ</td>
+							</tr>
+							<tr>
+								<td class="center">マグロ</td>
+								<td class="center">イカ</td>
+								<td class="center">アサリ</td>
+							</tr>
+							<tr>
+								<td class="center">カンパチ</td>
+								<td class="center"></td>
+								<td class="center">ハマグリ</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+			<section>
+				<h2>注意書きと注釈</h2>
+				<section>
+					<h3>注意書き</h3>
+					<div class="notice">
+						<div>
+							ほげほげに注意
+						</div>
+						<div>
+							<p>注意書きです。</p>
+							<p>かいぎょうもできる。</p>
+						</div>
+					</div>
+				</section>
+				<section>
+					<h3>注釈</h3>
+					<div class="info">
+						<div>
+							これは注釈
+						</div>
+						<div>
+							<p>注釈の本文。</p>
+							<p>２行目</p>
+						</div>
+					</div>
+				</section>
+			</section>
+			<section>
+				<h2>処理フロー</h2>
+				<p>処理手順を簡単な図にすることもできる。</p>
+				<div class="flow-box">
+					<div class="flow-item">
+						<div>
+							手順1
+						</div>
+						<div>
+							細かい作業説明
+						</div>
+					</div>
+					<div class="flow-next">
+						▼
+					</div>
+					<div class="flow-item">
+						<div>
+							手順2
+						</div>
+						<div>
+							細かい操作説明
+						</div>
+						<div>
+							説明2行目
+						</div>
+					</div>
+					<div class="flow-next">
+						▼
+					</div>
+					<div class="flow-parallel">
+						<div class="flow-box">
+							<div class="flow-item">
+								<div>
+									手順3-1-1
+								</div>
+							</div>
+							<div class="flow-next">
+								▼
+							</div>
+							<div class="flow-item">
+								<div>
+									手順3-1-2
+								</div>
+							</div>
+						</div>
+						<div class="flow-box">
+							<div class="flow-item">
+								<div>
+									手順3-2-1
+								</div>
+							</div>
+							<div class="flow-next">
+								▼
+							</div>
+							<div class="flow-item">
+								<div>
+									手順3-2-2
+								</div>
+							</div>
+							<div class="flow-next">
+								▼
+							</div>
+							<div class="flow-item">
+								<div>
+									手順3-3-3
+								</div>
+							</div>
+						</div>
+						<div class="flow-box">
+							<div class="flow-item">
+								<div>
+									手順3-3-1
+								</div>
+							</div>
+							<div class="flow-next">
+								▼
+							</div>
+							<div class="flow-item">
+								<div>
+									手順3-3-2
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="flow-next">
+						▼
+					</div>
+					<div class="flow-item">
+						<div>
+							手順4
+						</div>
+					</div>
+				</div>
+			</section>
+			<section>
+				<h2>リスト</h2>
+				<section>
+					<h3>ul</h3>
+					<ul>
+						<li>
+							<div>
+								あああ
+							</div>
+						</li>
+						<li>
+							<div>
+								いいい
+							</div>
+						</li>
+						<li>
+							<div>
+								ううう
+							</div>
+						</li>
+					</ul>
+				</section>
+				<section>
+					<h3>ol</h3>
+					<ol>
+						<li>
+							<div>
+								あああ
+							</div>
+						</li>
+						<li>
+							<div>
+								いいい
+							</div>
+						</li>
+						<li>
+							<div>
+								ううう
+							</div>
+						</li>
+					</ol>
+				</section>
+				<section>
+					<h3>複雑なリスト</h3>
+					<ul>
+						<li>
+							<div>
+								1項目目
+							</div>
+							<div>
+								何か説明・・・
+							</div>
+							<ol>
+								<li>
+									<div>
+										1項目目の1
+									</div>
+								</li>
+								<li>
+									<div>
+										1項目目の2
+									</div>
+								</li>
+							</ol>
+						</li>
+						<li>
+							<div>
+								2項目目
+							</div>
+							<div>
+								何か説明・・・
+							</div>
+							<ol>
+								<li>
+									<div>
+										2項目目の1
+									</div>
+								</li>
+								<li>
+									<div>
+										2項目目の2
+									</div>
+								</li>
+							</ol>
+						</li>
+					</ul>
+				</section>
+			</section>
+			<section>
+				<h2>コードブロック</h2>
+				<p>コードブロック。</p>
+				<code>
+					<pre>
+#include &lt;stdio.h&gt;
+
+int main(void){
+	printf(&quot;Hello World\n&quot;);
+}
+					</pre>
+				</code>
+			</section>
+			<section>
+				<h2>インラインコード</h2>
+				<p>これは<code>インラインコード</code>です。</p>
+			</section>
+			<section>
+				<h2>引用</h2>
+				<blockquote>
+					<div>
+						これは引用
+					</div>
+					<div>
+						2行目
+					</div>
+					<blockquote>
+						<div>
+							二重の引用
+						</div>
+						<div>
+							二重の引用続き
+						</div>
+					</blockquote>
+				</blockquote>
+			</section>
+			<section>
+				<h2>横線</h2>
+				<p>記号とスペースで点線にした場合とで別のスタイルがつくのでスタイルシートで見た目を変えられる。</p>
+				<hr class="solid-minus">
+				<hr class="break-minus">
+				<hr class="solid-under">
+				<hr class="break-under">
+				<hr class="solid-asta">
+				<hr class="break-asta">
+			</section>
+		</article>
+	</body>
+</html>
