@@ -84,6 +84,16 @@ CSV,テーブル,サンプル
 手順4
 ```
 
+## plantuml
+plantumlを書いたらSVGにする。
+plantumlのopenserverを使うのでインターネット接続が必須。
+```@plantuml
+@startuml
+Bob -> Alice : hello
+Bob <- Alice : Good by
+@enduml
+```
+
 ## リスト
 ### ul
 - あああ

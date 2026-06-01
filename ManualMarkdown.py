@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
 # SOFTWARE.
 from __future__ import annotations
-from typing import Self, Optional
+from typing import Self, Iterable, Optional, Sequence
 import argparse
 import os
 import io
@@ -33,10 +33,12 @@ import mimetypes
 import re
 import sys
 import shutil
+import zlib
+import urllib.request
+import urllib.parse
 from collections import deque
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence
 from enum import Enum
 from pprint import pprint, pformat
 import logging
@@ -185,7 +187,7 @@ class HTMLFormatter(HTMLParser):
 	}
 
 	NO_PARSE_TAG = {
-		'pre'
+		'pre', 'svg'
 	}
 
 	def __init__(self):
@@ -1040,6 +1042,51 @@ class MdParser:
 
 		return html_str
 
+	# pluntumlに送るためテキストをエンコードする
+	def _encode_plantuml(self, text: str) -> str:
+		# 1. UTF-8でバイト列に変換
+		utf8_bytes = text.encode('utf-8')
+		
+		# 2. Deflate圧縮 (Zlibヘッダとチェックサムを省くため、wbits=-zlib.MAX_WBITSを指定)
+		compressor = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+		compressed_bytes = compressor.compress(utf8_bytes) + compressor.flush()
+		
+		# 3. 標準のBase64で一旦エンコード
+		b64_bytes = base64.b64encode(compressed_bytes)
+		
+		# 4. PlantUML独自のBase64アルファベットへマッピング
+		# (標準の 'A-Z', 'a-z', '0-9', '+', '/' を PlantUML独自の順序に置換)
+		std_alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+		puml_alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
+		
+		mapping = bytes.maketrans(std_alphabet, puml_alphabet)
+		puml_bytes = b64_bytes.translate(mapping)
+		
+		return puml_bytes.decode('utf-8')
+
+	# plantuml openserverにリクエストしてSVGを取得する
+	def _add_svg_from_plantuml_openserver(self, mode: CustomMode, lines: list[str]) -> str:
+		if len(lines) == 0:
+			return ""
+		text = "".join(lines)
+		encoded = self._encode_plantuml(text)
+		url = f"https://www.plantuml.com/plantuml/svg/{encoded}"
+		# User-Agent をヘッダーに追加してBot判定を回避する
+		headers = {
+			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+		}
+
+		req = urllib.request.Request(url, headers = headers)
+		try:
+			with urllib.request.urlopen(req) as res:
+				body = res.read().decode("utf-8")
+				return f'<div>{body}</div>\n'
+
+		except urllib.error.HTTPError as e:
+			# Status codeでエラーハンドリング
+			print(e)
+			return f'<div><p>error response form https://www.plantuml.com/, {e}</p></div>\n'
+
 	# カスタムモードをパースする
 	# @mode:option(path)の形式
 	def _check_custom_mode(self, mode: str) -> CustomMode:
@@ -1083,6 +1130,7 @@ class MdParser:
 				"box": self._add_custom_box,
 				"csv": self._add_custom_csv_table,
 				"flowbox": self._add_flow_box,
+				"plantuml": self._add_svg_from_plantuml_openserver,
 			}
 			# カスタムモード
 			custom_mode = self._check_custom_mode(mode)
