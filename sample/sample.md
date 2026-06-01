@@ -94,6 +94,17 @@ Bob <- Alice : Good by
 @enduml
 ```
 
+## そのまま出力
+何もせずそのままHTMLに出力する。
+どうしてもHTMLを書きたいときなど。
+[強制的にHTML、外部ライブラリを使う](./raw_sample.md)も参考に。
+
+```@raw
+<div style="border: solid black 1px;">
+  <p>これは<br><span style="color:red;">そのまま</span><br>書き出される</p>
+</div>
+```
+
 ## リスト
 ### ul
 - あああ

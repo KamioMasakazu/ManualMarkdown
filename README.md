@@ -4,9 +4,9 @@
 - 空行を置きたい場合は2以上の空白文字だけの行を書く。
 - 画像その他でマークダウンに指定したパスはinputファイルのディレクトリからの相対パスとして処理する。
 - 1つのHTMLだけで配布可能な様にcssやjsは埋め込む。画像埋め込みはオプション。
-- @csv、@box拡張書式を持つ。
+- @〜〜〜の指定で拡張書式を使用可能。
 - 改行までを段落として扱う。改行のために文末にスペース2個は不要。
-- ヘッダ行毎に階層化された&lt;section&gt;になる。&lt;h1&gt;が始まってから&lt;h2〜6&gt;に当たるまでは&lt;header&gt;に書く。
+- ヘッダ行毎に階層化された&lt;section&gt;になる。&lt;h1&gt;が含まれるセクションだけは&lt;header&gt;に記述される。
 
 ## 使い方
 ### 入力ファイルと出力先だけ指定
@@ -30,6 +30,18 @@ ManualMarkdown.py sample/sample.md -o ./html --css ./sample/css/ --js ./sample/j
 ```shell
 ManualMarkdown.py sample/sample.md -o ./html --css ./sample/css/ --js ./sample/jslib/ --embed-image
 ```
+
+### --head、--bottom
+外部のjs、cssライブラリを使用したり、jsのコードを埋め込みたい場合のオプション。  
+これらと@rawコードブロックを併用すればHTML+CSS+JSでできることは出力ファイルでも実現できる。
+
+- --head [file ...]  
+  &lt;head&gt;タグ内で--css、--jsオプションが展開する前に指定したファイルの内容をそのまま展開する。  
+  CDNなどの外部ライブラリを読み込みたい時に使う。
+
+- --bottom [file ...]  
+  &lt;/body&gt;直前に指定したファイルの内容をそのまま展開する。  
+  jsのコードを末尾に書きたい時などに使う（&lt;script&gt;タグを補完したりしないので必要なら記述すること）。
 
 ## 拡張書式
 マニュアルを書くときに便利なMarkdown拡張がいくつかある。
@@ -148,6 +160,31 @@ CSV,テーブル,サンプル
 　　　　　　　　　　 ▼
 　　　　　　　　　「手順4」
 ```
+
+### @plantuml
+[plantuml](https://plantuml.com/ja/)の書式でUML図を書く。  
+SVGがHTMLにインラインで埋め込まれる。  
+plantumlのオープンサーバを使うのでインターネット接続できる必要がある。
+
+````markdown
+```@plantuml
+@startuml
+Alice->Bob : Hello
+return ok
+@enduml
+```
+````
+
+### @raw
+コードブロック内の文字列がそのまま展開される。  
+下の例だと記述したHTMLがそのまま書かれる。
+````
+```@raw
+<div style="border: solid black 1px;">
+  <p>これは<br><span style="color:red;">そのまま</span><br>書き出される</p>
+</div>
+```
+````
 
 ## その他
 ### 横線

@@ -81,6 +81,8 @@ class RenderOptions:
 	input_path: Path
 	output_path: Optional[Path]
 	debug: bool
+	head: Optional[str]
+	bottom: Optional[list[str]]
 	css_path: Optional[Path]
 	js_path: Optional[Path]
 	embed_image: bool
@@ -955,6 +957,10 @@ class MdParser:
 
 		return html
 
+	# コードブロック内をそのまま書き出す
+	def _add_custom_raw(self, mode: CustomMode, lines: list[str]) -> str:
+		return "".join(lines)
+
 	# boxカスタムモードでhtmlを書く
 	def _add_custom_box(self, mode: CustomMode, lines: list[str]) -> str:
 		if mode.type != "box":
@@ -1131,6 +1137,7 @@ class MdParser:
 				"csv": self._add_custom_csv_table,
 				"flowbox": self._add_flow_box,
 				"plantuml": self._add_svg_from_plantuml_openserver,
+				"raw": self._add_custom_raw,
 			}
 			# カスタムモード
 			custom_mode = self._check_custom_mode(mode)
@@ -1303,6 +1310,27 @@ class MdParser:
 	#==========================================================================
 	# マークダウンパース以外のHTML化処理
 	#==========================================================================
+	# --head、--bottomのファイルを展開する
+	def expand_file_data(self, files: list[str] | None) -> str:
+		if not files:
+			return ""
+		
+		ret = ""
+		for f in files:
+			target = Path(f)
+			if not target.exists():
+				logger.warning(f'head:{target} no such file or directory.')
+				continue
+
+			if not target.is_file():
+				logger(f"head:{target} is not file.")
+				continue
+
+			with open(target, "r", encoding="utf-8") as f:
+				ret += f.read()
+
+		return ret
+
 	# CSSを読み込んで展開する
 	def get_css(self):
 		css_path = self.options.css_path
@@ -1358,6 +1386,7 @@ class MdParser:
 		html += '<meta charset="utf-8">\n'
 		html += '<meta name="viewport" content="width=device-width">\n'
 		html += f'<title>{self.title}</title>\n'
+		html += self.expand_file_data(self.options.head)
 		styles = self.get_css()
 		if styles:
 			html += styles
@@ -1372,6 +1401,7 @@ class MdParser:
 	# HTMLの終わりの部分
 	def html_bottom(self) -> str:
 		html = '</article>\n'
+		html += self.expand_file_data(self.options.bottom)
 		html += '</body>\n'
 		html += '</html>\n'
 		return html
@@ -1469,23 +1499,19 @@ def parse_args() -> RenderOptions:
 ・ヘッダ行毎に階層化された<section>になる。
 """
 	)
-	parser.add_argument("input", help="入力となるマークダウンファイル")
+	parser.add_argument("input", help="入力となるマークダウンファイル。")
 	parser.add_argument("-d", "--debug", action="store_true", help="Debug mode.")
-	parser.add_argument("-o", dest="output", default=None, help="HTML出力先ファイル名かディレクトリ")
-	parser.add_argument("--css", dest="css", default="./default.css", help="cssファイル/ディレクトリ")
-	parser.add_argument("--js", dest="js", default=None, help="jsファイル/ディレクトリ")
-	parser.add_argument(
-		"--embed-image",
-		dest="embed_image",
-		action="store_true",
-		help='画像ファイルをimgタグのsrc属性に"data:..."で埋め込む',
-	)
+	parser.add_argument("-o", "--output", default=None, help="HTML出力先ファイル名かディレクトリ。")
+	parser.add_argument("--head", type=str, nargs="*", help="<head>にファイルの内容をそのまま転記する。jsやcssを外部参照する用。")
+	parser.add_argument("--bottom", type=str, nargs="*", help="</body>の直前にファイルの内容を展開する。")
+	parser.add_argument("--css", default="./default.css", help="cssファイル/ディレクトリ。<head>の<link>タグ内に展開する。")
+	parser.add_argument("--js", default=None, help="jsファイル/ディレクトリ。<head>の<script>タグ内に展開する。")
+	parser.add_argument("--embed-image", action="store_true", help='画像ファイルをimgタグのsrc属性に"data:..."で埋め込む')
 
 	ns = parser.parse_args()
 
 	input_path = Path(ns.input)
 	output_path = Path(ns.output) if ns.output else None
-	debug = ns.debug
 	css_path = Path(ns.css) if ns.css else None
 	js_path = Path(ns.js) if ns.js else None
 
@@ -1496,7 +1522,9 @@ def parse_args() -> RenderOptions:
 	return RenderOptions(
 		input_path=input_path,
 		output_path=output_path,
-		debug = debug,
+		debug = ns.debug,
+		head = ns.head,
+		bottom = ns.bottom,
 		css_path=css_path,
 		js_path=js_path,
 		embed_image=bool(ns.embed_image),
