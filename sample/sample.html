@@ -5,7 +5,7 @@
 		<meta name="viewport" content="width=device-width">
 		<title>サンプル</title>
 		<style>
-			/* ManualMarkdown デフォルトCSS */
+/* ManualMarkdown デフォルトCSS */
 
 body {
   margin: 0;
@@ -160,8 +160,7 @@ div.flow-item {
 
 div.flow-item > div:first-child {
   text-align:center;
-}
-		</style>
+}		</style>
 	</head>
 	<body>
 		<article>
@@ -192,44 +191,48 @@ div.flow-item > div:first-child {
 			<section>
 				<h2>CSVテーブル</h2>
 				<p>インラインのCSV表記をテーブルに。</p>
-				<table>
-					<tr>
-						<th>a</th>
-						<th>b</th>
-						<th>c</th>
-					</tr>
-					<tr>
-						<td>d</td>
-						<td>e</td>
-						<td>f</td>
-					</tr>
-					<tr>
-						<td>CSV</td>
-						<td>テーブル</td>
-						<td>サンプル</td>
-					</tr>
-				</table>
+				<div class="table-wrap">
+					<table>
+						<tr>
+							<th>a</th>
+							<th>b</th>
+							<th>c</th>
+						</tr>
+						<tr>
+							<td>d</td>
+							<td>e</td>
+							<td>f</td>
+						</tr>
+						<tr>
+							<td>CSV</td>
+							<td>テーブル</td>
+							<td>サンプル</td>
+						</tr>
+					</table>
+				</div>
 			</section>
 			<section>
 				<h2>CSVテーブル2</h2>
 				<p>外部ファイルのCSVをテーブルに。</p>
-				<table>
-					<tr>
-						<th>CSV</th>
-						<td>テーブル</td>
-						<td>サンプル</td>
-					</tr>
-					<tr>
-						<th>a</th>
-						<td>b</td>
-						<td>c</td>
-					</tr>
-					<tr>
-						<th>d</th>
-						<td>e</td>
-						<td>f</td>
-					</tr>
-				</table>
+				<div class="table-wrap">
+					<table>
+						<tr>
+							<th>CSV</th>
+							<td>テーブル</td>
+							<td>サンプル</td>
+						</tr>
+						<tr>
+							<th>a</th>
+							<td>b</td>
+							<td>c</td>
+						</tr>
+						<tr>
+							<th>d</th>
+							<td>e</td>
+							<td>f</td>
+						</tr>
+					</table>
+				</div>
 			</section>
 			<section>
 				<h2>マークダウンのテーブル</h2>
@@ -288,97 +291,107 @@ div.flow-item > div:first-child {
 						</div>
 					</div>
 				</section>
+				<section>
+					<h3>ただの@box</h3>
+					<p>&lt;div&gt;で囲まれるだけ。</p>
+					<div>
+						<p>注釈の本文。</p>
+						<p>２行目</p>
+					</div>
+				</section>
 			</section>
 			<section>
 				<h2>処理フロー</h2>
 				<p>処理手順を簡単な図にすることもできる。</p>
-				<div class="flow-box">
-					<div class="flow-item">
-						<div>
-							手順1
+				<div>
+					<div class="flow-box">
+						<div class="flow-item">
+							<div>
+								手順1
+							</div>
+							<div>
+								細かい作業説明
+							</div>
 						</div>
-						<div>
-							細かい作業説明
+						<div class="flow-next">
+							▼
 						</div>
-					</div>
-					<div class="flow-next">
-						▼
-					</div>
-					<div class="flow-item">
-						<div>
-							手順2
+						<div class="flow-item">
+							<div>
+								手順2
+							</div>
+							<div>
+								細かい操作説明
+							</div>
+							<div>
+								説明2行目
+							</div>
 						</div>
-						<div>
-							細かい操作説明
+						<div class="flow-next">
+							▼
 						</div>
-						<div>
-							説明2行目
-						</div>
-					</div>
-					<div class="flow-next">
-						▼
-					</div>
-					<div class="flow-parallel">
-						<div class="flow-box">
-							<div class="flow-item">
-								<div>
-									手順3-1-1
+						<div class="flow-parallel">
+							<div class="flow-box">
+								<div class="flow-item">
+									<div>
+										手順3-1-1
+									</div>
+								</div>
+								<div class="flow-next">
+									▼
+								</div>
+								<div class="flow-item">
+									<div>
+										手順3-1-2
+									</div>
 								</div>
 							</div>
-							<div class="flow-next">
-								▼
+							<div class="flow-box">
+								<div class="flow-item">
+									<div>
+										手順3-2-1
+									</div>
+								</div>
+								<div class="flow-next">
+									▼
+								</div>
+								<div class="flow-item">
+									<div>
+										手順3-2-2
+									</div>
+								</div>
+								<div class="flow-next">
+									▼
+								</div>
+								<div class="flow-item">
+									<div>
+										手順3-3-3
+									</div>
+								</div>
 							</div>
-							<div class="flow-item">
-								<div>
-									手順3-1-2
+							<div class="flow-box">
+								<div class="flow-item">
+									<div>
+										手順3-3-1
+									</div>
+								</div>
+								<div class="flow-next">
+									▼
+								</div>
+								<div class="flow-item">
+									<div>
+										手順3-3-2
+									</div>
 								</div>
 							</div>
 						</div>
-						<div class="flow-box">
-							<div class="flow-item">
-								<div>
-									手順3-2-1
-								</div>
-							</div>
-							<div class="flow-next">
-								▼
-							</div>
-							<div class="flow-item">
-								<div>
-									手順3-2-2
-								</div>
-							</div>
-							<div class="flow-next">
-								▼
-							</div>
-							<div class="flow-item">
-								<div>
-									手順3-3-3
-								</div>
-							</div>
+						<div class="flow-next">
+							▼
 						</div>
-						<div class="flow-box">
-							<div class="flow-item">
-								<div>
-									手順3-3-1
-								</div>
+						<div class="flow-item">
+							<div>
+								手順4
 							</div>
-							<div class="flow-next">
-								▼
-							</div>
-							<div class="flow-item">
-								<div>
-									手順3-3-2
-								</div>
-							</div>
-						</div>
-					</div>
-					<div class="flow-next">
-						▼
-					</div>
-					<div class="flow-item">
-						<div>
-							手順4
 						</div>
 					</div>
 				</div>

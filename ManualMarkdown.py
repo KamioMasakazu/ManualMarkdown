@@ -73,9 +73,13 @@ class RenderOptions:
 	Attributes:
 		input_path: 入力md
 		output_path: 出力html（Noneならstdout）
+		debug: デバッグモード
+		head: <head>に指定したファイルを展開する
+		bottom: </body>の直前に指定したファイルを展開する
 		css_path: cssファイル/ディレクトリ（Noneならdefault.css）
 		js_path: jsファイル/ディレクトリ（Noneなら無し）
 		embed_image: 画像をdata URLで埋め込む
+		no_format: HTMLをフォーマットしない
 	"""
 
 	input_path: Path
@@ -86,6 +90,7 @@ class RenderOptions:
 	css_path: Optional[Path]
 	js_path: Optional[Path]
 	embed_image: bool
+	no_format: bool
 
 ###############################################################################
 # 行解析用
@@ -188,9 +193,11 @@ class HTMLFormatter(HTMLParser):
 		'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'th', 'title', 'a'
 	}
 
-	NO_PARSE_TAG = {
-		'pre', 'svg'
-	}
+	# インデント整形はしないが、ブラウザ表示用にHTMLエスケープは必要なタグ
+	NO_PARSE_TAG = {'pre'}
+
+	# インデント整形もせず、HTMLエスケープも絶対に動かしてはいけないタグ
+	NO_PARSE_NO_ESCAPE = {'svg', 'style', 'script'}
 
 	def __init__(self):
 		super().__init__()
@@ -200,7 +207,8 @@ class HTMLFormatter(HTMLParser):
 		self.current_inline_tag = None
 		self.inline_data = []
 
-		self.no_parse = False	# タグの中身をインデントしない
+		self.no_parse = False	# タグの中身をインデントしないフラグ
+		self.tag_stack = []
 
 	# インデントを書く
 	def _write_indent(self):
@@ -213,7 +221,8 @@ class HTMLFormatter(HTMLParser):
 		self.output.write(f"<!{decl}>\n")
 
 	def handle_starttag(self, tag, attrs):
-		# no_parse の時は、入ってきたタグをそのまま文字列として出力して終了
+		self.tag_stack.append(tag)
+
 		if self.no_parse:
 			attr_str = "".join([f' {k}="{v}"' for k, v in attrs if v is not None])
 			self.output.write(f"<{tag}{attr_str}>")
@@ -233,11 +242,11 @@ class HTMLFormatter(HTMLParser):
 			self.inline_data.append(f"<{tag}{attr_str}>")
 			return
 		
-		# ここが pre の開始タグだった場合、後ろに改行 `\n` を入れない（好みによりますが、中のコードの先頭に空行が入るのを防ぐため）
-		if tag in self.NO_PARSE_TAG:
+		# どちらかの抑止タグ群にヒットしたら no_parse モードに入る
+		if tag in self.NO_PARSE_TAG or tag in self.NO_PARSE_NO_ESCAPE:
 			self._write_indent()
 			attr_str = "".join([f' {k}="{v}"' for k, v in attrs if v is not None])
-			self.output.write(f"<{tag}{attr_str}>") # \n を除去
+			self.output.write(f"<{tag}{attr_str}>")
 			self.no_parse = True
 			if tag not in self.VOID_ELEMENTS:
 				self.indent_level += 1
@@ -251,17 +260,18 @@ class HTMLFormatter(HTMLParser):
 
 
 	def handle_endtag(self, tag):
-		# 閉じるタグが pre だった場合の処理を最初に行う
-		if tag in self.NO_PARSE_TAG:
+		if self.tag_stack and self.tag_stack[-1] == tag:
+			self.tag_stack.pop()
+
+		# 抑止モードの解除判定
+		if tag in self.NO_PARSE_TAG or tag in self.NO_PARSE_NO_ESCAPE:
 			self.no_parse = False
 			if tag not in self.VOID_ELEMENTS:
 				self.indent_level -= 1
-			# pre の閉じタグ自体はインデントして改行する
 			self._write_indent()
 			self.output.write(f"</{tag}>\n")
 			return
 
-		# すでに pre 内部（no_parse）にいる状態なら、中の閉じタグをそのまま出力
 		if self.no_parse:
 			self.output.write(f"</{tag}>")
 			return
@@ -285,18 +295,27 @@ class HTMLFormatter(HTMLParser):
 		self.output.write(f"</{tag}>\n")
 
 	def handle_data(self, data):
-		# no_parse の時は一切 strip せず、改行もそのまま出力する
+		# 整形抑止中の処理
 		if self.no_parse:
-			self.output.write(html.escape(data))	# HTMLParserがアンエスケープしてくるのでエスケープ
+			current_tag = self.tag_stack[-1] if self.tag_stack else None
+
+			# 定義を分けたおかげで、判定条件が驚くほど直感的になりました
+			if current_tag in self.NO_PARSE_TAG:
+				self.output.write(html.escape(data))
+			else:
+				self.output.write(data)
 			return
 
+		# 通常テキストの処理
 		cleaned_data = data.strip()
 		if cleaned_data:
+			escaped_data = html.escape(cleaned_data)
+
 			if self.current_inline_tag:
-				self.inline_data.append(cleaned_data)
+				self.inline_data.append(escaped_data)
 			else:
 				self._write_indent()
-				self.output.write(f"{cleaned_data}\n")
+				self.output.write(f"{escaped_data}\n")
 
 	def get_result(self):
 		return self.output.getvalue()
@@ -501,12 +520,13 @@ class MdParser:
 		self.in_code_block = False
 
 		# 追加の解析が必要な場合
+		mode_name = mode.split(":")[0]	# オプションで分割して名前だけ取り出す
 		HANDLE = {
 			"@flowbox": self._parse_flow_box
 		}
 
-		if mode in HANDLE:
-			handler = HANDLE[mode]
+		if mode_name in HANDLE:
+			handler = HANDLE[mode_name]
 			in_block = handler(in_block)
 
 		logger.debug("end: MdParser::_is_code_block()")
@@ -782,7 +802,7 @@ class MdParser:
 		)
 
 	#==========================================================================
-	# HTML化処理関連
+	# HTML化処理関連ユーティリティ関数
 	#==========================================================================
 	# mimeタイプを推測する
 	def guess_mime_type(self, path: Path) -> str:
@@ -896,6 +916,9 @@ class MdParser:
 
 		return text
 
+	#==========================================================================
+	# HTML化標準書式（コードブロック以外）
+	#==========================================================================
 	# 通常行の追加
 	# 空行は無視する
 	# 2個以上の空白文字の行は<br>にして強制改行
@@ -954,235 +977,6 @@ class MdParser:
 			text = self._render_inline(line.value["str"])
 			html += f'<h{h_lvl}>{text}</h{h_lvl}>\n'
 			self.header_stack.append(line.value["level"])
-
-		return html
-
-	# コードブロック内をそのまま書き出す
-	def _add_custom_raw(self, mode: CustomMode, lines: list[str]) -> str:
-		return "".join(lines)
-
-	# boxカスタムモードでhtmlを書く
-	def _add_custom_box(self, mode: CustomMode, lines: list[str]) -> str:
-		if mode.type != "box":
-			raise ValueError(f"custom mode is not box.")
-		
-		html = ""
-		html += f'<div class="{mode.option}">\n'
-		title = self._render_inline(mode.title)
-		html += f'<div>{title}</div>\n'
-		html += '<div>\n'
-		for l in lines:
-			l = l.strip()
-			l = self._render_inline(l)
-			html += f'<p>{l}</p>\n'
-		html += '</div>\n'
-		html += '</div>\n'
-
-		return html
-
-	# cvsテーブルカスタムモードでhtmlを書く
-	def _add_custom_csv_table(self, mode: CustomMode, csv_data: list[str] | str) -> str:
-		if mode.type != "csv":
-			raise ValueError(f"cudtom mode is not csv.")
-
-		data = ""
-		if isinstance(csv_data, list):
-			data = "".join(csv_data)
-		elif isinstance(csv_data, str):
-			data = csv_data
-		else:
-			raise TypeError(csv_data)
-		
-		filed = io.StringIO(data)
-		reader = csv.reader(filed)
-
-		html = ""
-		html += '<table>\n'
-		for i, row in enumerate(reader):
-			html += '<tr>\n'
-			for j, cell in enumerate(row):
-				cell = self._render_inline(cell)
-				if mode.option == "th_row" and i == 0:
-					html += f'<th>{cell}</th>\n'
-				elif mode.option == "th_col" and j == 0:
-					html += f'<th>{cell}</th>\n'
-				else:
-					html += f'<td>{cell}</td>\n'
-			html += '</tr>\n'
-		html += '</table>\n'
-
-		return html
-
-	# 手順BOXのhtml書き出し
-	def _add_flow_box(self, mode: CustomMode, flow_data: FlowBox | FlowParallel | FlowItem | list) -> str:
-		ARROW = '<div class="flow-next">▼</div>\n'
-		html_str = ""
-
-		if isinstance(flow_data, FlowBox):
-			html_str += '<div class="flow-box">\n'
-			# 各要素（FlowItem や FlowParallel）の間にのみ ▼ を挟む
-			for i, d in enumerate(flow_data.data):
-				html_str += self._add_flow_box(mode, d)
-				if i < len(flow_data.data) - 1:
-					html_str += ARROW
-			html_str += '</div>\n'
-
-		elif isinstance(flow_data, FlowParallel):
-			html_str += '<div class="flow-parallel">\n'
-			for d in flow_data.data:
-				html_str += self._add_flow_box(mode, d)
-			html_str += '</div>\n'
-
-		elif isinstance(flow_data, FlowItem):
-			html_str += '<div class="flow-item">\n'
-			for d in flow_data.data:
-				text = self._render_inline(d)
-				html_str += f'\t<div>{text}</div>\n'
-			html_str += '</div>\n'
-
-		elif isinstance(flow_data, list):
-			for i, d in enumerate(flow_data):
-				html_str += self._add_flow_box(mode, d)
-				if i < len(flow_data) - 1:
-					html_str += ARROW
-
-		return html_str
-
-	# pluntumlに送るためテキストをエンコードする
-	def _encode_plantuml(self, text: str) -> str:
-		# 1. UTF-8でバイト列に変換
-		utf8_bytes = text.encode('utf-8')
-		
-		# 2. Deflate圧縮 (Zlibヘッダとチェックサムを省くため、wbits=-zlib.MAX_WBITSを指定)
-		compressor = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
-		compressed_bytes = compressor.compress(utf8_bytes) + compressor.flush()
-		
-		# 3. 標準のBase64で一旦エンコード
-		b64_bytes = base64.b64encode(compressed_bytes)
-		
-		# 4. PlantUML独自のBase64アルファベットへマッピング
-		# (標準の 'A-Z', 'a-z', '0-9', '+', '/' を PlantUML独自の順序に置換)
-		std_alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-		puml_alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
-		
-		mapping = bytes.maketrans(std_alphabet, puml_alphabet)
-		puml_bytes = b64_bytes.translate(mapping)
-		
-		return puml_bytes.decode('utf-8')
-
-	# plantuml openserverにリクエストしてSVGを取得する
-	def _add_svg_from_plantuml_openserver(self, mode: CustomMode, lines: list[str]) -> str:
-		if len(lines) == 0:
-			return ""
-		text = "".join(lines)
-		encoded = self._encode_plantuml(text)
-		url = f"https://www.plantuml.com/plantuml/svg/{encoded}"
-		# User-Agent をヘッダーに追加してBot判定を回避する
-		headers = {
-			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-		}
-
-		req = urllib.request.Request(url, headers = headers)
-		try:
-			with urllib.request.urlopen(req) as res:
-				body = res.read().decode("utf-8")
-				return f'<div>{body}</div>\n'
-
-		except urllib.error.HTTPError as e:
-			# Status codeでエラーハンドリング
-			print(e)
-			return f'<div><p>error response form https://www.plantuml.com/, {e}</p></div>\n'
-
-	# カスタムモードをパースする
-	# @mode:option(path)の形式
-	def _check_custom_mode(self, mode: str) -> CustomMode:
-		path = None
-		title = None
-		option = None
-
-		if mode[0] != "@":
-			return None
-
-		if "(" in mode and ")" in mode:
-			m = re.match(r"(.+)\((.*)\)", mode)
-			mode = m.group(1)
-			path = m.group(2)
-		
-		if "[" in mode and "]"in mode:
-			m = re.match(r"(.+)\[(.*)\]", mode)
-			mode = m.group(1)
-			title = m.group(2)
-		
-		if ":" in mode:
-			mode, option = mode.split(":", maxsplit=1)
-		
-		return CustomMode(
-			type = mode[1:],
-			option = option,
-			title = title,
-			path = path,
-		)
-
-	# コードブロックを記述
-	def _add_code_block(self, checked: LineValue) -> str:
-		if checked.type != LineType.CodeBlock:
-			raise ValueError(f"value type is not {LineType.CodeBlock}.")
-
-		mode = checked.value["mode"]
-		lines = checked.value["lines"]
-		html_str = ""
-		if len(mode) != 0 and mode[0] == "@":
-			HANDLER = {
-				"box": self._add_custom_box,
-				"csv": self._add_custom_csv_table,
-				"flowbox": self._add_flow_box,
-				"plantuml": self._add_svg_from_plantuml_openserver,
-				"raw": self._add_custom_raw,
-			}
-			# カスタムモード
-			custom_mode = self._check_custom_mode(mode)
-			if custom_mode.type in HANDLER:
-				handle = HANDLER[custom_mode.type]
-				html_str = handle(custom_mode, lines)
-			else:
-				logger.error(f"unknown custome mode '{custom_mode.type}'.")
-		else:
-			# 通常のコードブロック
-			html_str += f'<code class="{mode}">\n' if mode else '<code>\n'
-			html_str += '<pre>\n'
-			for l in lines:
-				html_str += html.escape(l)
-			html_str += '</pre>'
-			html_str += '</code>\n'
-		
-		return html_str
-
-	# ファイル読み込み指定のCSVテーブル
-	def _add_csv_table(self, checked: LineValue) -> str:
-		if checked.type != LineType.CustomCsvTable:
-			raise ValueError(f"value type is not {LineType.CustomCsvTable}.")
-		
-		html = ""
-		custom_mode = self._check_custom_mode(checked.value)
-
-		# ファイルの存在確認
-		dir = self.options.input_path.parent
-		fname = Path(custom_mode.path)
-		csv = None
-		if (dir/fname).exists():
-			# input_fileのディレクトリからの相対パスか？
-			csv = (dir/fname)
-		else:
-			# input_fileの相対パスでなかったらマークダウンの記述のパス
-			csv = fname
-
-		if not csv.exists():
-			logger.warning(f"{csv} is not exist.")
-			return html
-
-		with open(csv, "r", encoding="utf-8") as f:
-			csv = f.read()
-			html = self._add_custom_csv_table(custom_mode, csv)
 
 		return html
 
@@ -1262,6 +1056,292 @@ class MdParser:
 		
 		return self._add_blockquote_helper(checked.value)
 
+	#==========================================================================
+	# 拡張書式とコードブロック
+	#==========================================================================
+	# オプションをタグのclassにした文字列を返す。
+	# tagは<と>をつけない。
+	# lf = Falseにしたら最後に改行をつけない
+	def _optioned_tag(self, tag: str, opts: list[str], *, lf=True) -> str:
+		classed = ""
+		if opts:
+			classed = f"""<{tag} class="{' '.join(opts)}">"""
+		else:
+			classed = f"<{tag}>"
+
+		if lf: classed + "\n"
+		return classed
+
+	# コードブロック内をそのまま書き出す
+	def _add_custom_raw(self, mode: CustomMode, lines: list[str]) -> str:
+		return "".join(lines)
+
+	# titleのないboxの中身
+	def _add_simple_box_inner(self, mode: CustomMode, lines: list[str]) -> str:
+		html = ""
+
+		for l in lines:
+			l = l.strip()
+			l = self._render_inline(l)
+			html += f'<p>{l}</p>\n'
+
+		return html
+
+	# titleのあるboxの中身
+	def _add_title_box_inner(self, mode: CustomMode, lines: list[str]) -> str:
+		html = ""
+		title = self._render_inline(mode.title)
+		html += f'<div>{title}</div>\n'
+		html += '<div>\n'
+		for l in lines:
+			l = l.strip()
+			l = self._render_inline(l)
+			html += f'<p>{l}</p>\n'
+		html += '</div>\n'
+
+		return html
+
+	# boxカスタムモードでhtmlを書く
+	def _add_custom_box(self, mode: CustomMode, lines: list[str]) -> str:
+		if mode.type != "box":
+			raise ValueError(f"custom mode is not box.")
+
+		# 一番外の<div>
+		html = self._optioned_tag('div', mode.option)
+
+		if mode.title:
+			html += self._add_title_box_inner(mode, lines)
+		else:
+			html += self._add_simple_box_inner(mode, lines)
+
+		html += '</div>'
+		return html
+
+	# cvsテーブルカスタムモードでhtmlを書く
+	def _add_custom_csv_table(self, mode: CustomMode, csv_data: list[str] | str) -> str:
+		if mode.type != "csv":
+			raise ValueError(f"cudtom mode is not csv.")
+
+		data = ""
+		if isinstance(csv_data, list):
+			data = "".join(csv_data)
+		elif isinstance(csv_data, str):
+			data = csv_data
+		else:
+			raise TypeError(csv_data)
+		
+		filed = io.StringIO(data)
+		reader = csv.reader(filed)
+
+		# th_row, th_col以外のオプション
+		classes = [opt for opt in mode.option if not opt in ["th_row", "th_col"]]
+
+		html = '<div class="table-wrap">'
+		html += self._optioned_tag('table', classes)
+		for i, row in enumerate(reader):
+			html += '<tr>\n'
+			for j, cell in enumerate(row):
+				cell = self._render_inline(cell)
+				if "th_row" in mode.option and i == 0:
+					html += f'<th>{cell}</th>\n'
+				elif "th_col" in mode.option and j == 0:
+					html += f'<th>{cell}</th>\n'
+				else:
+					html += f'<td>{cell}</td>\n'
+			html += '</tr>\n'
+		html += '</table>\n'
+		html += '</div>\n'
+
+		return html
+
+	# 手順BOXのhtml書き出し
+	def _add_flow_box(self, flow_data: FlowBox | FlowParallel | FlowItem | list) -> str:
+		ARROW = '<div class="flow-next">▼</div>\n'
+		html_str = ""
+
+		if isinstance(flow_data, FlowBox):
+			html_str += '<div class="flow-box">\n'
+			# 各要素（FlowItem や FlowParallel）の間にのみ ▼ を挟む
+			for i, d in enumerate(flow_data.data):
+				html_str += self._add_flow_box(d)
+				if i < len(flow_data.data) - 1:
+					html_str += ARROW
+			html_str += '</div>\n'
+
+		elif isinstance(flow_data, FlowParallel):
+			html_str += '<div class="flow-parallel">\n'
+			for d in flow_data.data:
+				html_str += self._add_flow_box(d)
+			html_str += '</div>\n'
+
+		elif isinstance(flow_data, FlowItem):
+			html_str += '<div class="flow-item">\n'
+			for d in flow_data.data:
+				text = self._render_inline(d)
+				html_str += f'\t<div>{text}</div>\n'
+			html_str += '</div>\n'
+
+		elif isinstance(flow_data, list):
+			for i, d in enumerate(flow_data):
+				html_str += self._add_flow_box(d)
+				if i < len(flow_data) - 1:
+					html_str += ARROW
+
+		return html_str
+
+	# 手順BOXのhtml書き出し
+	def _add_flow_box_main(self, mode: CustomMode, flow_data: FlowBox | FlowParallel | FlowItem | list) -> str:
+		html_str = self._optioned_tag('div', mode.option)
+		html_str += self._add_flow_box(flow_data)
+		html_str += '</div>\n'
+		pprint(mode)
+		return html_str
+
+	# pluntumlに送るためテキストをエンコードする
+	def _encode_plantuml(self, text: str) -> str:
+		# 1. UTF-8でバイト列に変換
+		utf8_bytes = text.encode('utf-8')
+		
+		# 2. Deflate圧縮 (Zlibヘッダとチェックサムを省くため、wbits=-zlib.MAX_WBITSを指定)
+		compressor = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+		compressed_bytes = compressor.compress(utf8_bytes) + compressor.flush()
+		
+		# 3. 標準のBase64で一旦エンコード
+		b64_bytes = base64.b64encode(compressed_bytes)
+		
+		# 4. PlantUML独自のBase64アルファベットへマッピング
+		# (標準の 'A-Z', 'a-z', '0-9', '+', '/' を PlantUML独自の順序に置換)
+		std_alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+		puml_alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
+		
+		mapping = bytes.maketrans(std_alphabet, puml_alphabet)
+		puml_bytes = b64_bytes.translate(mapping)
+		
+		return puml_bytes.decode('utf-8')
+
+	# plantuml openserverにリクエストしてSVGを取得する
+	def _add_svg_from_plantuml_openserver(self, mode: CustomMode, lines: list[str]) -> str:
+		if len(lines) == 0:
+			return ""
+		text = "".join(lines)
+		encoded = self._encode_plantuml(text)
+		url = f"https://www.plantuml.com/plantuml/svg/{encoded}"
+		# User-Agent をヘッダーに追加してBot判定を回避する
+		headers = {
+			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+		}
+
+		req = urllib.request.Request(url, headers = headers)
+		try:
+			with urllib.request.urlopen(req) as res:
+				body = res.read().decode("utf-8")
+				html_str = self._optioned_tag('div', mode.option, lf=False)
+				html_str += f'{body}'
+				html_str += '</div>\n'
+				return html_str
+
+		except urllib.error.HTTPError as e:
+			# Status codeでエラーハンドリング
+			logger.error(repr(e))
+			return f'<div><p>error response form https://www.plantuml.com/, {e}</p></div>\n'
+
+	# カスタムモードをパースする
+	# @mode:option(path)の形式
+	def _check_custom_mode(self, mode: str) -> CustomMode:
+		path = None
+		title = None
+		option = None
+
+		if mode[0] != "@":
+			return None
+
+		if "(" in mode and ")" in mode:
+			m = re.match(r"(.+)\((.*)\)", mode)
+			mode = m.group(1)
+			path = m.group(2)
+		
+		if "[" in mode and "]"in mode:
+			m = re.match(r"(.+)\[(.*)\]", mode)
+			mode = m.group(1)
+			title = m.group(2)
+		
+		if ":" in mode:
+			mode, opt_str = mode.split(":", maxsplit=1)
+			option = opt_str.split("&")
+		
+		return CustomMode(
+			type = mode[1:],
+			option = option,
+			title = title,
+			path = path,
+		)
+
+	# コードブロックを記述
+	def _add_code_block(self, checked: LineValue) -> str:
+		if checked.type != LineType.CodeBlock:
+			raise ValueError(f"value type is not {LineType.CodeBlock}.")
+
+		mode = checked.value["mode"]
+		lines = checked.value["lines"]
+		html_str = ""
+		if len(mode) != 0 and mode[0] == "@":
+			HANDLER = {
+				"box": self._add_custom_box,
+				"csv": self._add_custom_csv_table,
+				"flowbox": self._add_flow_box_main,
+				"plantuml": self._add_svg_from_plantuml_openserver,
+				"raw": self._add_custom_raw,
+			}
+			# カスタムモード
+			custom_mode = self._check_custom_mode(mode)
+			if custom_mode.type in HANDLER:
+				handle = HANDLER[custom_mode.type]
+				html_str = handle(custom_mode, lines)
+			else:
+				logger.error(f"unknown custome mode '{custom_mode.type}'.")
+		else:
+			# 通常のコードブロック
+			html_str += f'<code class="{mode}">\n' if mode else '<code>\n'
+			html_str += '<pre>\n'
+			for l in lines:
+				html_str += html.escape(l)
+			html_str += '</pre>'
+			html_str += '</code>\n'
+		
+		return html_str
+
+	# ファイル読み込み指定のCSVテーブル
+	def _add_csv_table(self, checked: LineValue) -> str:
+		if checked.type != LineType.CustomCsvTable:
+			raise ValueError(f"value type is not {LineType.CustomCsvTable}.")
+		
+		html = ""
+		custom_mode = self._check_custom_mode(checked.value)
+
+		# ファイルの存在確認
+		dir = self.options.input_path.parent
+		fname = Path(custom_mode.path)
+		csv = None
+		if (dir/fname).exists():
+			# input_fileのディレクトリからの相対パスか？
+			csv = (dir/fname)
+		else:
+			# input_fileの相対パスでなかったらマークダウンの記述のパス
+			csv = fname
+
+		if not csv.exists():
+			logger.warning(f"{csv} is not exist.")
+			return html
+
+		with open(csv, "r", encoding="utf-8") as f:
+			csv = f.read()
+			html = self._add_custom_csv_table(custom_mode, csv)
+
+		return html
+
+	#==========================================================================
+	# マークダウンパース関連のHTML化処理全体
+	#==========================================================================
 	# htmlの追記と構造スタック操作
 	def add_html(self, checked: LineValue) -> str:
 		HANDLER = {
@@ -1472,9 +1552,10 @@ class MdParser:
 		html = top + article + bottom
 
 		# 整形する
-		html_parser = HTMLFormatter()
-		html_parser.feed(html)
-		html = html_parser.get_result()
+		if not self.options.no_format:
+			html_parser = HTMLFormatter()
+			html_parser.feed(html)
+			html = html_parser.get_result()
 
 		self.output(html)
 
@@ -1507,6 +1588,7 @@ def parse_args() -> RenderOptions:
 	parser.add_argument("--css", default="./default.css", help="cssファイル/ディレクトリ。<head>の<link>タグ内に展開する。")
 	parser.add_argument("--js", default=None, help="jsファイル/ディレクトリ。<head>の<script>タグ内に展開する。")
 	parser.add_argument("--embed-image", action="store_true", help='画像ファイルをimgタグのsrc属性に"data:..."で埋め込む')
+	parser.add_argument("--no-format", action="store_true", help="HTMLをフォーマットしない。")
 
 	ns = parser.parse_args()
 
@@ -1528,6 +1610,7 @@ def parse_args() -> RenderOptions:
 		css_path=css_path,
 		js_path=js_path,
 		embed_image=bool(ns.embed_image),
+		no_format = bool(ns.no_format)
 	)
 
 ###############################################################################
