@@ -1194,7 +1194,6 @@ class MdParser:
 		html_str = self._optioned_tag('div', mode.option)
 		html_str += self._add_flow_box(flow_data)
 		html_str += '</div>\n'
-		pprint(mode)
 		return html_str
 
 	# pluntumlに送るためテキストをエンコードする
@@ -1241,10 +1240,40 @@ class MdParser:
 				return html_str
 
 		except urllib.error.HTTPError as e:
-			# Status codeでエラーハンドリング
 			logger.error(repr(e))
 			return f'<div><p>error response form https://www.plantuml.com/, {e}</p></div>\n'
 
+	# kroki.ioにリクエストしてSVGを取得する
+	def _add_svg_from_kroki(self, mode: CustomMode, lines: list[str]) -> str:
+		if len(lines) == 0:
+			return ""
+		text = "".join(lines)
+
+		# 1. 圧縮してBase64エンコード
+		compressed = zlib.compress(text.encode("utf-8"), 9)
+		# 2. urlsafe_b64encode の結果（bytes）をデコードして文字列にし、末尾の '=' を削除
+		encoded = (
+			base64.urlsafe_b64encode(compressed).decode("utf-8").replace("=", "")
+		)
+
+		headers = {
+			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+		}
+		url = f"https://kroki.io/{mode.path}/svg/{encoded}"
+
+		req = urllib.request.Request(url, headers=headers)
+		try:
+			with urllib.request.urlopen(req) as res:
+				body = res.read().decode("utf-8")
+				html_str = self._optioned_tag('div', mode.option, lf=False)
+				html_str += f'{body}'
+				html_str += '</div>\n'
+				return html_str
+
+		except urllib.error.HTTPError as e:
+			logger.error(repr(e))
+			return f"<div><p>error response from https://kroki.io/, {e}</p></div>\n"
+	
 	# カスタムモードをパースする
 	# @mode:option(path)の形式
 	def _check_custom_mode(self, mode: str) -> CustomMode:
@@ -1252,7 +1281,7 @@ class MdParser:
 		title = None
 		option = None
 
-		if mode[0] != "@":
+		if len(mode) == 0 or mode[0] != "@":
 			return None
 
 		if "(" in mode and ")" in mode:
@@ -1281,19 +1310,23 @@ class MdParser:
 		if checked.type != LineType.CodeBlock:
 			raise ValueError(f"value type is not {LineType.CodeBlock}.")
 
+		# カスタムモード
 		mode = checked.value["mode"]
+		custom_mode = self._check_custom_mode(mode)
+
+		# コードブロック内の文字列のリスト
 		lines = checked.value["lines"]
+
 		html_str = ""
-		if len(mode) != 0 and mode[0] == "@":
+		if custom_mode != None:
 			HANDLER = {
 				"box": self._add_custom_box,
 				"csv": self._add_custom_csv_table,
 				"flowbox": self._add_flow_box_main,
+				"kroki": self._add_svg_from_kroki,
 				"plantuml": self._add_svg_from_plantuml_openserver,
 				"raw": self._add_custom_raw,
 			}
-			# カスタムモード
-			custom_mode = self._check_custom_mode(mode)
 			if custom_mode.type in HANDLER:
 				handle = HANDLER[custom_mode.type]
 				html_str = handle(custom_mode, lines)

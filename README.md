@@ -175,6 +175,42 @@ return ok
 ```
 ````
 
+### @kroki
+[kroki.io](https://kroki.io/)で図を作成する。  
+コードブロックに`@kroki(図の指定)`を指定する。  
+SVGがHTMLにインラインで埋め込まれる。  
+kroki.ioのサーバを使うのでインターネット接続できる必要がある。  
+それぞれの図を書く書式は図ごとのマニュアルを参照。  
+
+````markdown
+```@kroki(graphviz)
+digraph D {
+	subgraph cluster_p {
+		label = "Kroki";
+		subgraph cluster_c1 {
+			label = "Server";
+			Filebeat;
+			subgraph cluster_gc_1 {
+				label = "Docker/Server";
+				Java;
+			}
+			subgraph cluster_gc_2 {
+				label = "Docker/Mermaid";
+				"Node.js";
+				"Puppeteer";
+				"Chrome";
+			}
+		}
+		subgraph cluster_c2 {
+			label = "CLI";
+			Golang;
+		}
+	}
+}
+```
+````
+
+
 ### @raw
 コードブロック内の文字列がそのまま展開される。  
 下の例だと記述したHTMLがそのまま書かれる。

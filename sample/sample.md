@@ -101,6 +101,56 @@ Bob <- Alice : Good by
 @enduml
 ```
 
+## krokiで図を作る
+kroki.ioを使って様々な図を描ける。
+インターネット接続が必須。
+
+### graphviz
+```@kroki(graphviz)
+digraph D {
+	subgraph cluster_p {
+		label = "Kroki";
+		subgraph cluster_c1 {
+			label = "Server";
+			Filebeat;
+			subgraph cluster_gc_1 {
+				label = "Docker/Server";
+				Java;
+			}
+			subgraph cluster_gc_2 {
+				label = "Docker/Mermaid";
+				"Node.js";
+				"Puppeteer";
+				"Chrome";
+			}
+		}
+		subgraph cluster_c2 {
+			label = "CLI";
+			Golang;
+		}
+	}
+}
+```
+
+### Mermaid
+```@kroki(mermaid)
+graph TD
+  A[ Anyone ] -->|Can help | B( Go to github.com/yuzutech/kroki )
+  B --> C{ How to contribute? }
+  C --> D[ Reporting bugs ]
+  C --> E[ Sharing ideas ]
+  C --> F[ Advocating ]
+```
+
+### plantuml
+plantumlはこっちでもOK。
+```@kroki(plantuml)
+@startuml
+Bob -> Alice : hello
+Bob <- Alice : Good by
+@enduml
+```
+
 ## そのまま出力
 何もせずそのままHTMLに出力する。
 どうしてもHTMLを書きたいときなど。
